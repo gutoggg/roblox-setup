@@ -1,25 +1,30 @@
 local ServerScriptServer = game:GetService("ServerScriptService")
 local Promise = require(game.ReplicatedStorage.Packages.promise)
 local Signal = require(game.ReplicatedStorage.Packages.signal)
+local ServerComm = require(game.ReplicatedStorage.Packages.comm).ServerComm
+
+local remoteFolder = Instance.new("Folder", game.ReplicatedStorage)
+remoteFolder.Name = "_remotes"
 
 local Server = {}
+Server.__index = Server
 
-Server.CurrentServer = nil
+Server.Server = nil
 
 function Server.new()
-    if Server.CurrentServer ~= nil then
-        return Server.CurrentServer
+    if Server.Server ~= nil then
+        return Server.Server
     else
         local self = setmetatable({}, Server)
 
         self.Services = {}
 
-        Server.CurrentServer = self
+        Server.Server = self
         return self
     end
 end
 
-function Server:Start()
+function Server:Boot()
     local servicesFolder =  ServerScriptServer:WaitForChild("Services")
 
     local servicesInitArray = {}
@@ -27,12 +32,15 @@ function Server:Start()
 
     for i, j in servicesFolder:GetChildren() do
         self.Services[j.Name] = require(j)
+        self.Services[j.Name].Server = self
+        self.Services[j.Name].Comm =  ServerComm.new(remoteFolder, j.Name)
+        self.Services[j.Name].Services  = self.Services
         table.insert(servicesInitArray, Promise.new(function(resolve, reject)
             print("Initializing service " .. j.Name)
-            self.Services[j.Name]:Init()
+            self.Services[j.Name]:Init(self)
             servicesInitSignal:Once(function()
                 print("Starting service " .. j.Name)
-                self.Services[j.Name]:Start()
+                self.Services[j.Name]:Start(self)
             end)
             resolve()
         end))
@@ -46,8 +54,5 @@ function Server:Start()
 
 end
 
-function Server:GetService(serviceName : string)
-    return self.Services[serviceName]
-end
 
 return Server
